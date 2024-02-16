@@ -7,12 +7,17 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<UseWindowsForms>False</UseWindowsForms>
+		<ApplicationIcon>Resources\icon.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
 	<None Remove="Resources\fileIcon.png" />
 		<None Remove="Resources\folderIcon.png" />
 		<None Remove="Resources\textFileIcon.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Include="Resources\icon.ico" />
 	</ItemGroup>
 
 	<ItemGroup>
