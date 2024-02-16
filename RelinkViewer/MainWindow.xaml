@@ -10,10 +10,11 @@
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ColorOverride.xaml"/>
                 <ResourceDictionary Source="DarkTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other window-specific resources -->
         </ResourceDictionary>
+        
     </Window.Resources>
     <Window.Effect>
         <DropShadowEffect/>
@@ -47,40 +48,77 @@
                 </Style>
             </TextBlock.Style>
         </TextBlock>
+        <!-- File viewer -->
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Margin="10,84,242,26" Grid.ColumnSpan="2">
-            <TreeView x:Name="DirectoryTreeView" Background="#FF3F3F46" Height="383">
+            <TreeView x:Name="DirectoryTreeView" Background="#FF3F3F46" Height="auto" PreviewMouseWheel="TreeView_PreviewMouseWheel" PreviewMouseDown="TreeView_PreviewMouseDown" PreviewMouseMove="TreeView_PreviewMouseMove" PreviewMouseUp="TreeView_PreviewMouseUp" VirtualizingStackPanel.IsVirtualizing="True" VirtualizingStackPanel.VirtualizationMode="Recycling">
                 <TreeView.Resources>
                     <!-- Define a style for all TextBlocks within the TreeView to have white text color -->
                     <Style TargetType="TextBlock">
                         <Setter Property="Foreground" Value="White"/>
                     </Style>
+                    <!-- Style for TreeViewItem -->
+                    <Style TargetType="TreeViewItem">
+                        <EventSetter Event="PreviewMouseRightButtonDown" Handler="TreeViewItem_PreviewMouseRightButtonDown"/>
+                        <Setter Property="Foreground" Value="White"/>
+                        <Style.Triggers>
+                            <!-- Trigger for when the item is selected and focused -->
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#FF555555"/>
+                                <Setter Property="Foreground" Value="LightGray"/>
+                            </Trigger>
+                            <!-- Override system colors for the unfocused selected state -->
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                    
                 </TreeView.Resources>
-
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate>
                         <!-- Bind the TextBlock text to your item's property (e.g., Name) -->
                         <TextBlock Text="{Binding Name}"/>
                     </HierarchicalDataTemplate>
                 </TreeView.ItemTemplate>
+                 <TreeView.Effect>
+            <DropShadowEffect Color="Black" Direction="320" ShadowDepth="5" Opacity="0.7" BlurRadius="5"/>
+        </TreeView.Effect>
             </TreeView>
         </ScrollViewer>
-        <ListView x:Name="SearchResultsListView" Margin="10,96,242,43" Grid.ColumnSpan="2" Background="#FF3F4161" Visibility="Collapsed" >
+        <!-- Search Results-->
+        <ListView x:Name="SearchResultsListView" Margin="10,96,242,43" Grid.ColumnSpan="2" Background="#FF3F4161" Visibility="Collapsed" MouseDoubleClick="SearchResultsListView_MouseDoubleClick">
             <ListView.Resources>
+                <!-- Explicit style for TextBlock to ensure text color -->
+                <Style TargetType="TextBlock">
+                    <Setter Property="Foreground" Value="White"/>
+                </Style>
                 <!-- Style for the ListView items -->
                 <Style TargetType="ListViewItem">
+                    <Setter Property="Foreground" Value="White"/>
                     <Setter Property="Background" Value="Transparent"/>
                     <Style.Triggers>
+                        <!-- Hover -->
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="White"/>
-                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Background" Value="DarkBlue"/>
                         </Trigger>
+                        <!-- Selected -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Background" Value="LightGray"/>
                             <Setter Property="Foreground" Value="Black"/>
                         </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetProperty="Background.Color" To="DarkBlue" Duration="0:0:0.3"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                        </Trigger>
                     </Style.Triggers>
+                    
                 </Style>
-                <!-- Style for the GridView column headers -->
             </ListView.Resources>
             <ListView.View>
                 <GridView>
@@ -88,22 +126,9 @@
                     <GridViewColumn Header="Full Path" DisplayMemberBinding="{Binding FullPath}" Width="350"/>
                 </GridView>
             </ListView.View>
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="ContextMenuService.ContextMenu">
-                        <Setter.Value>
-                            <ContextMenu>
-                                <MenuItem Header="Extract" Click="ExtractMenuItem_Click"/>
-                            </ContextMenu>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </ListView.ItemContainerStyle>
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding Name}" />
-                </DataTemplate>
-            </ListView.ItemTemplate>
+            <ListView.Effect>
+                <DropShadowEffect Color="Black" Direction="320" ShadowDepth="5" Opacity="0.7" BlurRadius="5"/>
+            </ListView.Effect>
         </ListView>
     </Grid>
 </Window>

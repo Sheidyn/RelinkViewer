@@ -30,8 +30,14 @@ namespace RelinkViewer
     {
         ConfigurationManager config;
         DirectoryNode rootDirectoryNode;
-        private DispatcherTimer searchTimer;
         private string filielist;
+        //Scrolling variables
+        private bool isAutoScrolling = false;
+        private Point autoScrollStartPoint;
+        private ScrollViewer autoScrollTarget;
+        private System.Windows.Threading.DispatcherTimer autoScrollTimer;
+        private double autoScrollSpeed = 0;
+        //
         /// <summary>
         /// Constructor for MainWindow. Sets up event listeners and initializes the UI components.
         /// </summary>
@@ -40,8 +46,7 @@ namespace RelinkViewer
             InitializeComponent();
 
             // Initialize the search timer with a debounce interval
-            searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-
+            SearchTextBox.Visibility = Visibility.Collapsed;
             config = ConfigurationManager.Instance;
             Loaded += MainWindow_Loaded;
         }
@@ -64,13 +69,14 @@ namespace RelinkViewer
             {
                 StatusText.Text = "Downloading file list...";
                 filielist = await DownloadFileListAsync("https://raw.githubusercontent.com/Nenkai/GBFRDataTools/master/GBFRDataTools/filelist.txt", "filelist.txt");
-                
+
                 //var archive = new DataArchive();
                 //archive.Init(fileContent);
 
                 StatusText.Text = "Building directory tree...";
                 rootDirectoryNode = await Task.Run(() => BuildDirectoryTree(filielist, new Progress<double>(UpdateProgressBar)));
                 UpdateUI(rootDirectoryNode);
+                SearchTextBox.Visibility = Visibility.Visible;
             }
             catch (Exception ex)
             {
@@ -131,30 +137,92 @@ namespace RelinkViewer
         {
             var treeViewItem = new TreeViewItem
             {
-                Header = CreateItemHeader(node.Name, GetIconPathForNode(node)), // Assuming CreateItemHeader is defined as before
-                Tag = node // Store the node in the Tag property for easy access later
+                // Use CreateItemHeader for a consistent look, including the icon
+                Header = CreateItemHeader(node.Name, GetIconPathForNode(node)),
+                // Store the node in the Tag property for easy reference later
+                Tag = node
             };
 
-            // Add a dummy node if this node has children to show the expand arrow
+            // This setup for lazy loading of children remains unchanged
             if (node.Children.Any())
             {
-                treeViewItem.Items.Add(null); // null indicates unloaded children
+                treeViewItem.Items.Add(null); // Placeholder for lazy loading
                 treeViewItem.Expanded += TreeViewItem_Expanded; // Event handler for expanding the node
             }
 
-            if (!node.IsDirectory) // Assuming IsDirectory is a method to determine if the node is a directory
-            {
-                treeViewItem.MouseDoubleClick += FileNode_DoubleClick; // Attach event handler
-                //Right Click menu
-                treeViewItem.ContextMenu = new ContextMenu();
-                var menuItemExtract = new MenuItem { Header = "Extract" };
-                menuItemExtract.Click += (sender, e) => ExtractFile(node);
+            // Always create the context menu and add general options
+            var contextMenu = new ContextMenu();
 
-                treeViewItem.ContextMenu.Items.Add(menuItemExtract);
+            // Add "Copy Name" and "Copy Full Path" menu items
+            AddContextMenuItem(contextMenu, "Copy Name", () => Clipboard.SetText(node.Name));
+            AddContextMenuItem(contextMenu, "Copy Full Path", () => Clipboard.SetText(node.FullPath));
+
+            // Conditionally add "Extract" option for non-directory nodes
+            if (!node.IsDirectory)
+            {
+                AddContextMenuItem(contextMenu, "Extract", () => ExtractFile(node));
             }
+
+            // Assign the constructed menu to the TreeViewItem
+            treeViewItem.ContextMenu = contextMenu;
 
             return treeViewItem;
         }
+
+        private void TreeViewItem_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Find the TreeViewItem that received the right-click
+            var treeViewItem = FindAncestorOrSelf<TreeViewItem>(e.OriginalSource as DependencyObject);
+
+            if (treeViewItem != null)
+            {
+                treeViewItem.IsSelected = true;
+                e.Handled = true; // Prevent further processing, ensuring context menu applies to the right item
+            }
+        }
+
+        // Helper method to traverse up the visual tree to find the TreeViewItem
+        public static T FindAncestorOrSelf<T>(DependencyObject obj) where T : DependencyObject
+        {
+            while (obj != null)
+            {
+                if (obj is T objTyped)
+                {
+                    return objTyped;
+                }
+                obj = VisualTreeHelper.GetParent(obj);
+            }
+            return null;
+        }
+
+
+        private void AddContextMenuItem(ContextMenu menu, string header, Action action)
+        {
+            var menuItem = new MenuItem { Header = header };
+            menuItem.Click += (sender, e) =>
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to copy {header.ToLower()} to clipboard: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            };
+            menu.Items.Add(menuItem);
+        }
+
+        private void OnTreeViewItemExpanded(object sender, RoutedEventArgs e)
+        {
+            var item = e.OriginalSource as TreeViewItem;
+            if (item.Items.Count == 1 && item.Items[0] is string && (string)item.Items[0] == "Loading...")
+            {
+                item.Items.Clear();
+                // Load and add the actual child items to the item here
+            }
+        }
+
 
         private async void ExtractFile(DirectoryNode node)
         {
@@ -190,6 +258,97 @@ namespace RelinkViewer
                 }
             }
         }
+
+        #region Mousewheel funcionality
+        private void TreeView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            var treeView = sender as UIElement;
+            var scrollViewer = FindScrollViewerParent(treeView);
+
+            if (scrollViewer != null)
+            {
+                if (e.Delta > 0)
+                {
+                    scrollViewer.LineUp();
+                }
+                else
+                {
+                    scrollViewer.LineDown();
+                }
+                e.Handled = true;
+            }
+        }
+
+        private ScrollViewer FindScrollViewerParent(DependencyObject child)
+        {
+            var parentDepObj = VisualTreeHelper.GetParent(child);
+            while (parentDepObj != null && !(parentDepObj is ScrollViewer))
+            {
+                parentDepObj = VisualTreeHelper.GetParent(parentDepObj);
+            }
+            return parentDepObj as ScrollViewer;
+        }
+
+        private void TreeView_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Middle)
+            {
+                Mouse.OverrideCursor = Cursors.Hand;
+
+                autoScrollTarget = FindScrollViewerParent(sender as DependencyObject);
+                if (autoScrollTarget != null)
+                {
+                    isAutoScrolling = true;
+                    autoScrollStartPoint = e.GetPosition(autoScrollTarget);
+                    (sender as UIElement).CaptureMouse();
+
+                    autoScrollTimer = new System.Windows.Threading.DispatcherTimer();
+                    autoScrollTimer.Interval = TimeSpan.FromMilliseconds(1); // Adjust for smoother or faster scrolling
+                    autoScrollTimer.Tick += AutoScrollTimer_Tick;
+                    autoScrollTimer.Start();
+
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void TreeView_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (isAutoScrolling)
+            {
+                var currentPosition = e.GetPosition(autoScrollTarget);
+                // Calculate speed based on vertical distance from the start point
+                autoScrollSpeed = (currentPosition.Y - autoScrollStartPoint.Y) * 0.1; // Adjust multiplier for sensitivity
+            }
+        }
+
+        private void AutoScrollTimer_Tick(object sender, EventArgs e)
+        {
+            if (autoScrollTarget != null && isAutoScrolling)
+            {
+                autoScrollTarget.ScrollToVerticalOffset(autoScrollTarget.VerticalOffset + autoScrollSpeed);
+            }
+        }
+
+        private void TreeView_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Middle)
+            {
+                Mouse.OverrideCursor = null;
+                isAutoScrolling = false;
+                if (autoScrollTimer != null)
+                {
+                    autoScrollTimer.Stop();
+                    autoScrollTimer.Tick -= AutoScrollTimer_Tick;
+                    autoScrollTimer = null;
+                }
+                (sender as UIElement).ReleaseMouseCapture();
+                e.Handled = true;
+            }
+        }
+
+        #endregion
+
 
         private string GetIconPathForNode(DirectoryNode node)
         {
@@ -360,6 +519,62 @@ namespace RelinkViewer
                 {
                     ExtractFile(node);
                 }
+            }
+        }
+
+
+        private void SearchResultsListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (SearchResultsListView.SelectedItem is DirectoryNode selectedNode)
+            {
+                SelectItemByPath("data/" + selectedNode.FullPath);
+                // Collapse the ListView to hide the search results
+                SearchResultsListView.Visibility = Visibility.Collapsed;
+                // Optionally, make sure the TreeView is visible if it was not
+                DirectoryTreeView.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SelectItemByPath(string path)
+        {
+            // Split the path to get individual parts.
+            var parts = path.Split('/');
+            ItemsControl currentItem = DirectoryTreeView;
+
+            foreach (var part in parts)
+            {
+                bool found = false;
+
+                // Wait for the item containers to be generated.
+                currentItem.ApplyTemplate();
+                ItemsPresenter itemsPresenter = (ItemsPresenter)currentItem.Template.FindName("ItemsHost", currentItem);
+                itemsPresenter?.ApplyTemplate();
+                currentItem.UpdateLayout();
+
+                for (int i = 0; i < currentItem.Items.Count; i++)
+                {
+                    if (currentItem.ItemContainerGenerator.ContainerFromIndex(i) is TreeViewItem treeViewItem)
+                    {
+                        var node = (DirectoryNode)treeViewItem.Tag;
+                        if (node.Name.Equals(part, StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Expand the current node and proceed to search within its children.
+                            treeViewItem.IsExpanded = true;
+                            currentItem = treeViewItem;
+                            found = true;
+
+                            // If it's the last part of the path, select it.
+                            if (part == parts.Last())
+                            {
+                                treeViewItem.IsSelected = true;
+                                treeViewItem.BringIntoView();
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (!found) break; // Break the loop if the path part wasn't found.
             }
         }
 
