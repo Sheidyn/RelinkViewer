@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:local="clr-namespace:RelinkViewer"
         mc:Ignorable="d"
         Title="Relink Viewer" Height="600" Width="800" Background="#FF545454">
@@ -33,8 +34,21 @@
             <TextBlock x:Name="StatusText" Text="Loading..." Margin="5" Foreground="White"/>
             <ProgressBar x:Name="LoadingProgressBar" Height="20" IsIndeterminate="True" Foreground="#FF12C7DE"/>
         </StackPanel>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Margin="10,39,251,26" Grid.ColumnSpan="2">
-            <TreeView x:Name="DirectoryTreeView" Background="#FF3F3F46">
+        <xctk:WatermarkTextBox Watermark="Search..." x:Name="SearchTextBox" Margin="10,31,0,0" TextChanged="SearchTextBox_TextChanged" Grid.ColumnSpan="2" Height="27" VerticalAlignment="Top" HorizontalAlignment="Left" Width="535"/>
+        
+        <TextBlock Text="Search..." IsHitTestVisible="False" Foreground="Gray" Visibility="Collapsed" Margin="5,0,0,0">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource AncestorType=TextBox}}" Value="">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Margin="10,84,242,26" Grid.ColumnSpan="2">
+            <TreeView x:Name="DirectoryTreeView" Background="#FF3F3F46" Height="383">
                 <TreeView.Resources>
                     <!-- Define a style for all TextBlocks within the TreeView to have white text color -->
                     <Style TargetType="TextBlock">
@@ -50,5 +64,46 @@
                 </TreeView.ItemTemplate>
             </TreeView>
         </ScrollViewer>
+        <ListView x:Name="SearchResultsListView" Margin="10,96,242,43" Grid.ColumnSpan="2" Background="#FF3F4161" Visibility="Collapsed" >
+            <ListView.Resources>
+                <!-- Style for the ListView items -->
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="White"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="LightGray"/>
+                            <Setter Property="Foreground" Value="Black"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+                <!-- Style for the GridView column headers -->
+            </ListView.Resources>
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="File Name" DisplayMemberBinding="{Binding Name}" Width="200"/>
+                    <GridViewColumn Header="Full Path" DisplayMemberBinding="{Binding FullPath}" Width="350"/>
+                </GridView>
+            </ListView.View>
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="ContextMenuService.ContextMenu">
+                        <Setter.Value>
+                            <ContextMenu>
+                                <MenuItem Header="Extract" Click="ExtractMenuItem_Click"/>
+                            </ContextMenu>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
     </Grid>
 </Window>

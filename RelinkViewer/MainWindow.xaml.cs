@@ -28,15 +28,21 @@ namespace RelinkViewer
     /// </summary>
     public partial class MainWindow : Window
     {
-        private IConfigurationRoot Configuration;
-        private string settingsFilePath = "settings.ini";
-
+        ConfigurationManager config;
+        DirectoryNode rootDirectoryNode;
+        private DispatcherTimer searchTimer;
+        private string filielist;
         /// <summary>
         /// Constructor for MainWindow. Sets up event listeners and initializes the UI components.
         /// </summary>
         public MainWindow()
         {
             InitializeComponent();
+
+            // Initialize the search timer with a debounce interval
+            searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+
+            config = ConfigurationManager.Instance;
             Loaded += MainWindow_Loaded;
         }
 
@@ -45,64 +51,9 @@ namespace RelinkViewer
         /// </summary>
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            LoadOrCreateSettings();
             await LoadFileListAsync();
         }
 
-        private void LoadOrCreateSettings()
-        {
-            var configurationBuilder = new ConfigurationBuilder().AddIniFile(settingsFilePath, optional: true, reloadOnChange: true);
-            Configuration = configurationBuilder.Build();
-
-            // Attempt to load the game folder path from the configuration
-            string gameFolderPath = Configuration["GameFolderPath"];
-
-            // Check if the game folder path is set and if the specific .exe exists
-            if (!string.IsNullOrEmpty(gameFolderPath) && File.Exists(Path.Combine(gameFolderPath, "granblue_fantasy_relink.exe")))
-            {
-                // The .exe exists, proceed with application logic
-            }
-            else
-            {
-                // The .exe doesn't exist or the path is not set; prompt the user for a valid game folder
-                PromptForGameFolder();
-            }
-        }
-
-        private void PromptForGameFolder()
-        {
-            bool validPathSelected = false;
-            while (!validPathSelected)
-            {
-                var dialog = new System.Windows.Forms.FolderBrowserDialog
-                {
-                    Description = "Select the game folder containing 'granblue_fantasy_relink.exe':",
-                    UseDescriptionForTitle = true, // This property requires .NET Framework 4.6.2 or later
-                };
-
-                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
-                {
-                    if (File.Exists(Path.Combine(dialog.SelectedPath, "granblue_fantasy_relink.exe")))
-                    {
-                        // Valid path; update the configuration and break the loop
-                        Configuration["GameFolderPath"] = dialog.SelectedPath;
-                        File.WriteAllText(settingsFilePath, $"GameFolderPath={dialog.SelectedPath}");
-                        validPathSelected = true;
-                    }
-                    else
-                    {
-                        MessageBox.Show("The selected folder does not contain 'granblue_fantasy_relink.exe'. Please select the correct game folder.", "Invalid Folder Selected", MessageBoxButton.OK, MessageBoxImage.Error);
-                        // The loop will continue, prompting the user again
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("A game folder path containing 'granblue_fantasy_relink.exe' is required to proceed.", "Configuration Required", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    Application.Current.Shutdown();
-                    return; // Exit the method to prevent further execution
-                }
-            }
-        }
         /// <summary>
         /// Asynchronously downloads the file list and builds the directory tree.
         /// Updates the UI to reflect the current operation status and shows the resulting tree.
@@ -112,10 +63,14 @@ namespace RelinkViewer
             try
             {
                 StatusText.Text = "Downloading file list...";
-                var fileContent = await DownloadFileListAsync("https://raw.githubusercontent.com/Nenkai/GBFRDataTools/master/GBFRDataTools/filelist.txt", "filelist.txt");
+                filielist = await DownloadFileListAsync("https://raw.githubusercontent.com/Nenkai/GBFRDataTools/master/GBFRDataTools/filelist.txt", "filelist.txt");
+                
+                //var archive = new DataArchive();
+                //archive.Init(fileContent);
+
                 StatusText.Text = "Building directory tree...";
-                var rootNode = await Task.Run(() => BuildDirectoryTree(fileContent, new Progress<double>(UpdateProgressBar)));
-                UpdateUI(rootNode);
+                rootDirectoryNode = await Task.Run(() => BuildDirectoryTree(filielist, new Progress<double>(UpdateProgressBar)));
+                UpdateUI(rootDirectoryNode);
             }
             catch (Exception ex)
             {
@@ -187,7 +142,33 @@ namespace RelinkViewer
                 treeViewItem.Expanded += TreeViewItem_Expanded; // Event handler for expanding the node
             }
 
+            if (!node.IsDirectory) // Assuming IsDirectory is a method to determine if the node is a directory
+            {
+                treeViewItem.MouseDoubleClick += FileNode_DoubleClick; // Attach event handler
+                //Right Click menu
+                treeViewItem.ContextMenu = new ContextMenu();
+                var menuItemExtract = new MenuItem { Header = "Extract" };
+                menuItemExtract.Click += (sender, e) => ExtractFile(node);
+
+                treeViewItem.ContextMenu.Items.Add(menuItemExtract);
+            }
+
             return treeViewItem;
+        }
+
+        private async void ExtractFile(DirectoryNode node)
+        {
+            string fileToExtract = node.FullPath;
+            await FileOperations.ExtractFileAsync(fileToExtract);
+        }
+
+        private void FileNode_DoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is TreeViewItem treeViewItem && treeViewItem.Tag is DirectoryNode node && !node.IsDirectory)
+            {
+                e.Handled = true; // Prevent the event from bubbling up
+                                  // Execute your file-specific operation here
+            }
         }
 
         private void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
@@ -270,7 +251,8 @@ namespace RelinkViewer
         private DirectoryNode BuildDirectoryTree(string fileContent, IProgress<double> progress)
         {
             var lines = fileContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            var rootNode = new DirectoryNode { Name = "data" };
+            // Initialize the rootNode with an empty path or a specific root path if needed
+            var rootNode = new DirectoryNode("data", "");
             int totalLines = lines.Length;
             int updateFrequency = totalLines / 100; // Update progress at most 100 times.
 
@@ -279,12 +261,19 @@ namespace RelinkViewer
                 var line = lines[i];
                 var parts = line.Split('/');
                 var currentNode = rootNode;
+                string currentPath = ""; // Keep track of the current path
 
-                foreach (var part in parts)
+                for (int j = 0; j < parts.Length; j++)
                 {
-                    var nextNode = currentNode.Children.FirstOrDefault(c => c.Name == part) ?? new DirectoryNode { Name = part };
-                    if (!currentNode.Children.Contains(nextNode))
+                    var part = parts[j];
+                    // Update the current path
+                    currentPath = j == 0 ? part : $"{currentPath}/{part}";
+
+                    var nextNode = currentNode.Children.FirstOrDefault(c => c.Name == part);
+                    if (nextNode == null)
                     {
+                        // Create the new node with its name and the cumulative path
+                        nextNode = new DirectoryNode(part, currentPath);
                         currentNode.Children.Add(nextNode);
                     }
                     currentNode = nextNode;
@@ -298,6 +287,7 @@ namespace RelinkViewer
             }
             return rootNode;
         }
+
 
         /// <summary>
         /// Updates the progress bar based on the progress of the directory tree building.
@@ -314,5 +304,66 @@ namespace RelinkViewer
                 LoadingProgressBar.Value = progress * 100;
             }
         }
+
+
+
+        #region Searchbar
+
+        private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var searchText = SearchTextBox.Text.Trim();
+
+            if (searchText.Length >= 3) // Conduct search with at least 3 characters
+            {
+                var searchResults = SearchDirectoryTree(rootDirectoryNode, searchText);
+                SearchResultsListView.ItemsSource = searchResults;
+
+                // Toggle visibility to show search results and hide the original TreeView
+                SearchResultsListView.Visibility = Visibility.Visible;
+                DirectoryTreeView.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                // No search or cleared search, show the original TreeView
+                SearchResultsListView.Visibility = Visibility.Collapsed;
+                DirectoryTreeView.Visibility = Visibility.Visible;
+            }
+        }
+
+        private List<DirectoryNode> SearchDirectoryTree(DirectoryNode root, string searchText)
+        {
+            var results = new List<DirectoryNode>();
+            SearchDirectoryNode(root, searchText.ToLower(), results);
+            return results;
+        }
+
+        private void SearchDirectoryNode(DirectoryNode node, string searchText, List<DirectoryNode> results)
+        {
+            // Simple case-insensitive search in the node's name
+            if (node.Name.ToLower().Contains(searchText))
+            {
+                results.Add(node);
+            }
+
+            foreach (var child in node.Children)
+            {
+                SearchDirectoryNode(child, searchText, results);
+            }
+        }
+        private void ExtractMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem)
+            {
+                // Assuming the DataContext of the ListViewItem is a DirectoryNode object
+                DirectoryNode node = ((FrameworkElement)menuItem.DataContext).DataContext as DirectoryNode;
+                if (node != null)
+                {
+                    ExtractFile(node);
+                }
+            }
+        }
+
+        #endregion
+
     }
 }

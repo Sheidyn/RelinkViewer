@@ -1,28 +1,45 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <UseWindowsForms>True</UseWindowsForms>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>False</UseWindowsForms>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <None Remove="Resources\fileIcon.png" />
-    <None Remove="Resources\folderIcon.png" />
-    <None Remove="Resources\textFileIcon.png" />
-  </ItemGroup>
+	<ItemGroup>
+	<None Remove="Resources\fileIcon.png" />
+		<None Remove="Resources\folderIcon.png" />
+		<None Remove="Resources\textFileIcon.png" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Ini" Version="8.0.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Extended.Wpf.Toolkit" Version="4.6.0" />
+		<PackageReference Include="FlatSharp.Compiler" Version="7.4.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="FlatSharp.Runtime" Version="7.4.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Ini" Version="8.0.0" />	  
+		<PackageReference Include="K4os.Compression.LZ4" Version="1.3.6" />
+		<PackageReference Include="K4os.Compression.LZ4.Streams" Version="1.3.6" />
+		<PackageReference Include="RestSharp" Version="110.2.0" />
+		<PackageReference Include="Syroot.BinaryData" Version="5.2.2" />
+		<PackageReference Include="Syroot.BinaryData.Memory" Version="5.2.2" />
+		<PackageReference Include="System.IO.Hashing" Version="8.0.0" />
+		<PackageReference Include="WindowsAPICodePack-Shell" Version="1.1.1" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Resource Include="Resources\fileIcon.png" />
-    <Resource Include="Resources\folderIcon.png" />
-    <Resource Include="Resources\textFileIcon.png" />
-  </ItemGroup>
+	<ItemGroup>
+		<Resource Include="Resources\fileIcon.png" />
+		<Resource Include="Resources\folderIcon.png" />
+		<Resource Include="Resources\textFileIcon.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<FlatSharpSchema Include="..\Submodules\GBFRDataTools\GBFRDataTools\Entities\IndexFile.fbs" />
+	</ItemGroup>
 
 </Project>
