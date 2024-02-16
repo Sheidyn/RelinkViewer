@@ -1,0 +1,17 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Define your dark theme colors -->
+    <SolidColorBrush x:Key="WindowBackgroundColor" Color="#FF2D2D30"/>
+    <SolidColorBrush x:Key="ControlBackgroundColor" Color="#FF333337"/>
+    <SolidColorBrush x:Key="ControlForegroundColor" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="ControlHighlightColor" Color="#FF3F3F46"/>
+
+    <!-- Example of styling a Button -->
+    <Style TargetType="Button">
+        <Setter Property="Background" Value="{StaticResource ControlBackgroundColor}"/>
+        <Setter Property="Foreground" Value="{StaticResource ControlForegroundColor}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ControlHighlightColor}"/>
+    </Style>
+
+    <!-- Add more control styles as needed -->
+</ResourceDictionary>
